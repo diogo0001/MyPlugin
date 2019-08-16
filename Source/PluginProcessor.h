@@ -1,20 +1,8 @@
-/*
-  ==============================================================================
-
-    This file was auto-generated!
-
-    It contains the basic framework code for a JUCE plugin processor.
-
-  ==============================================================================
-*/
-
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
+#define MAX_DELAY_TIME 2
 
-//==============================================================================
-/**
-*/
 class MyPluginAudioProcessor  : public AudioProcessor
 {
 public:
@@ -58,7 +46,21 @@ public:
 private:
     //==============================================================================
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MyPluginAudioProcessor)
-		AudioParameterFloat *gain;
+	AudioParameterFloat *gain;
 	float gainSmoothed;
 
+	float *circularBufferLeft;
+	float *circularBufferRight;
+	int circularBufferWriteHead;
+	int circularBufferLenght;
+
+	float delayTimeInSamples;
+	float delayReadHead;
+	float delayInSec;
+
+	float feedback;
+	float feedbackLeft;
+	float feedbackRight;
+
+	float dryWet;
 };

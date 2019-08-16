@@ -1,12 +1,3 @@
-/*
-  ==============================================================================
-
-    This file was auto-generated!
-
-    It contains the basic framework code for a JUCE plugin processor.
-
-  ==============================================================================
-*/
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
@@ -26,10 +17,32 @@ MyPluginAudioProcessor::MyPluginAudioProcessor()
 {
 	addParameter(gain = new AudioParameterFloat("gain","Gain",0.0f,1.5f,0.5f));
 	gainSmoothed = gain->get();
+	circularBufferLeft = nullptr;
+	circularBufferRight = nullptr;
+	circularBufferWriteHead = 0;
+	circularBufferLenght = 0;
+	delayReadHead = 0;
+	delayTimeInSamples = 0;
+	delayInSec = 0.2;
+	feedbackLeft = 0;
+	feedbackRight = 0;
+	feedback = 0.5; 
+	dryWet = 0.5;
 }
 
 MyPluginAudioProcessor::~MyPluginAudioProcessor()
 {
+	if (circularBufferLeft != nullptr)
+	{
+		delete [] circularBufferLeft;
+		circularBufferLeft = nullptr;
+	}
+
+	if (circularBufferRight != nullptr)
+	{
+		delete [] circularBufferRight;
+		circularBufferRight = nullptr;
+	}
 }
 
 //==============================================================================
@@ -97,8 +110,22 @@ void MyPluginAudioProcessor::changeProgramName (int index, const String& newName
 //==============================================================================
 void MyPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
+	delayTimeInSamples = sampleRate * delayInSec;
+	circularBufferLenght = sampleRate * MAX_DELAY_TIME;
+
+	if (circularBufferLeft == nullptr) 
+	{
+		circularBufferLeft = new float[circularBufferLenght];
+	}
+	 
+	if (circularBufferRight == nullptr) 
+	{
+		circularBufferRight = new float[circularBufferLenght];
+	}
+
+	circularBufferWriteHead = 0;
+	feedbackLeft = 0;
+	feedbackRight = 0;
 }
 
 void MyPluginAudioProcessor::releaseResources()
@@ -137,21 +164,10 @@ void MyPluginAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffe
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
+    
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
   
     auto* channelLeft = buffer.getWritePointer(0);
 	auto* channelRight = buffer.getWritePointer(1);
@@ -161,6 +177,34 @@ void MyPluginAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffe
 		gainSmoothed = gainSmoothed - 0.004*(gainSmoothed - gain->get());
 		channelLeft[sample] *= gainSmoothed;
 		channelRight[sample] *= gainSmoothed;
+
+		circularBufferLeft[circularBufferWriteHead] = channelLeft[sample] + feedbackLeft;
+		circularBufferRight[circularBufferWriteHead] = channelRight[sample] + feedbackRight;
+		
+		delayReadHead = circularBufferWriteHead - delayTimeInSamples;
+
+		if (delayReadHead < 0) {
+			delayReadHead += circularBufferLenght;
+		}
+
+		float delaySampleLeft = circularBufferLeft[(int)delayReadHead];
+		float delaySampleRight = circularBufferRight[(int)delayReadHead];
+
+		feedbackLeft = delaySampleLeft * feedback;
+		feedbackRight = delaySampleRight * feedback;
+
+		float outLeftSample = buffer.getSample(0, sample) * dryWet + delaySampleLeft * (1  -dryWet);
+		float outRightSample = buffer.getSample(1, sample) * dryWet + delaySampleRight * (1 - dryWet);
+
+		buffer.setSample(0, sample, outLeftSample);
+		buffer.setSample(1, sample, outRightSample);
+
+		circularBufferWriteHead++;
+
+		if (circularBufferWriteHead >= circularBufferLenght)
+		{
+			circularBufferWriteHead = 0;
+		}
 	}
 }
 
