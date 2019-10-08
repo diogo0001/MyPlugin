@@ -2,9 +2,14 @@
 
 Plugin de áudio usando o framework JUCE.
 
-Efeitos:
+### Efeitos:
+  
+  WIP
 
   - Controle de ganho;
   - Delay - dry/wet, feedback
+  
+  TO DO
+  
   - Chorus
   - Fanger
